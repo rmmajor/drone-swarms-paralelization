@@ -3,7 +3,7 @@ SEED = None  # None if we want a random seed or a number if we want to specify a
 LOAD_MAP_FILE = False  # For loading map from a file
 
 # FILES PATH
-BASE_ROUTE = "./"
+BASE_ROUTE = "./data/"
 DATA_ROUTE = "data.json"
 MAP_ROUTE = "map.txt"
 

@@ -1,3 +1,6 @@
+import concurrent
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
 import Config
 import cProfile
 import json
@@ -17,12 +20,11 @@ from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from shapely.ops import nearest_points
-from tensorflow.python.keras import backend as K
-import tensorflow as tf
+import torch
 
 from Drone import Drone
 from Agent.Agent import Agent
-from Model.Model import create_model
+from Model.Model import create_py_torch_model
 
 matplotlib.use("Agg")  # For running in SO without graphical environment
 cProfile.run('re.compile("foo|bar")')
@@ -230,24 +232,27 @@ class Program:
                     f.write("%s, " % movement)
                 f.write("\n")
 
+    def create_agent(self, drone, count):
+        return Agent(
+            drone.get_name(),
+            count,
+            drone.get_battery_time(),
+            drone.get_speed(),
+            program.compute_minimum_area(self.__drones),
+            (0, 0),
+            self.__original_environment,
+        )
+
+    # def compute_episode(self):
+    #     pass
+
     def compute_path(self):
-        count = 0
 
-        self.__agents = []
-        for drone in program.get_drones():  # Create Reinforcement Learning Agents
-            self.__agents.append(
-                Agent(
-                    drone.get_name(),
-                    count,
-                    drone.get_battery_time(),
-                    drone.get_speed(),
-                    program.compute_minimum_area(self.__drones),
-                    (0, 0),
-                    self.__original_environment,
-                )
-            )
+        with ProcessPoolExecutor() as executor:
+            futures = {executor.submit(self.create_agent, drone, i): drone for i, drone in enumerate(program.get_drones())}
 
-            count += 1
+            for future in concurrent.futures.as_completed(futures):
+                self.__agents.append(future.result())
 
         # Get number of observation episodes
         number_episodes = Config.SIMULATIONS
@@ -312,7 +317,7 @@ class Program:
                         self.get_environment(),
                     )
                 )
-                model = create_model(input_matrix.shape)
+                model = create_py_torch_model(input_matrix.shape)
 
             # Get initial environment for starting observation
             actual_environment = program.get_environment()
@@ -711,40 +716,27 @@ class Program:
 
 
 def specify_random_seed():
-
-    if Config.SEED == None:
+    if Config.SEED is None:
         # Get random seed
         Config.SEED = np.random.randint(1, 255)
 
-        # 1. Set `PYTHONHASHSEED` environment variable at a fixed value
-
+    # 1. Set `PYTHONHASHSEED` environment variable at a fixed value
     os.environ["PYTHONHASHSEED"] = str(Config.SEED)
 
     # 2. Set `python` built-in pseudo-random generator at a fixed value
-
     random.seed(Config.SEED)
 
     # 3. Set `numpy` pseudo-random generator at a fixed value
     np.random.seed(Config.SEED)
 
-    # 4. Set `tensorflow` pseudo-random generator at a fixed value
+    # 4. Set `torch` pseudo-random generator at a fixed value
+    torch.manual_seed(Config.SEED)
+    # If you are using CUDA:
+    torch.cuda.manual_seed_all(Config.SEED)
 
-    if tf.__version__ < "2.0.0":
-        tf.set_random_seed(Config.SEED)
-    else:
-
-        tf.compat.v1.set_random_seed(Config.SEED)
-
-    session_conf = tf.ConfigProto(
-        intra_op_parallelism_threads=1, inter_op_parallelism_threads=1
-    )
-    sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
-    K.set_session(sess)
-
-    # 6. Save seed to a file
+    # 5. Save seed to a file
     with open(Config.BASE_ROUTE + "session_seed.txt", "w") as seed_file:
         seed_file.write(str(Config.SEED) + "\n")
-        seed_file.close()
 
 
 if __name__ == "__main__":

@@ -1,18 +1,25 @@
-import Config
-from tensorflow.keras import Input, models
-from tensorflow.keras.layers import Flatten, Dense
+import torch.nn as nn
+from Config import DENSE1_SIZE, DENSE1_ACTIVATION, DENSE2_SIZE, DENSE2_ACTIVATION
 
 
-def create_model(input_shape):
-    y = Input(shape=input_shape)
-    z = Flatten()(y)
-    z = Dense(Config.DENSE1_SIZE, activation=Config.DENSE1_ACTIVATION)(z)
-    z = Dense(Config.DENSE2_SIZE, activation=Config.DENSE2_ACTIVATION)(z)
-
-    # our model will accept the inputs of the two branches and
-    # then output a single value
-    model = models.Model(y, z)
-
-    model.compile(optimizer=Config.OPTIMIZER, loss="mse")
-    model.summary()
+def create_py_torch_model(input_shape):
+    model = Model(input_shape)
     return model
+
+
+class Model(nn.Module):
+    def __init__(self, input_shape):
+        super(Model, self).__init__()
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(input_shape, DENSE1_SIZE)
+        self.activation1 = getattr(nn, DENSE1_ACTIVATION)()
+        self.fc2 = nn.Linear(DENSE1_SIZE, DENSE2_SIZE)
+        self.activation2 = getattr(nn, DENSE2_ACTIVATION)()
+
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.fc1(x)
+        x = self.activation1(x)
+        x = self.fc2(x)
+        x = self.activation2(x)
+        return x
